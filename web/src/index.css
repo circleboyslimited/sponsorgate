@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mist: #f3f4f8;
+  --color-white: #ffffff;
+  --color-indigo: #4338ca;
+  --color-indigo-soft: #eef0ff;
+  --color-carbon: #111827;
+  --color-gray: #6b7280;
+  --color-border: #e3e6ee;
+  --color-pass: #059669;
+  --color-fail: #dc2626;
+  --font-sans: "Figtree", system-ui, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, monospace;
+}
+body { background: var(--color-mist); color: var(--color-carbon); font-family: var(--font-sans); }
+
+@layer components {
+  .panel { background: var(--color-white); border: 1px solid var(--color-border); border-radius: 14px; }
+  .inp { width: 100%; border: 1px solid var(--color-border); border-radius: 10px; padding: .55rem .75rem; font-size: .88rem; background: #fff; }
+  .inp:focus { outline: none; border-color: var(--color-indigo); box-shadow: 0 0 0 3px rgb(67 56 202 / .12); }
+  .act { border-radius: 10px; padding: .55rem 1rem; font-weight: 700; font-size: .85rem; }
+  .act:disabled { opacity: .45; }
+  .act-ind { background: var(--color-indigo); color: #fff; }
+  .act-out { border: 1px solid var(--color-border); background: #fff; }
+  .lab { font-size: .75rem; font-weight: 700; color: var(--color-gray); text-transform: uppercase; letter-spacing: .06em; }
+}
