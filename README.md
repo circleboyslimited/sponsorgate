@@ -91,6 +91,25 @@ npm test        # 13 tests: every policy rule, limits, budget, submission, HTTP
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Web app
+
+![sponsorgate web app](docs/assets/web-app.png)
+
+A policy console at `web/`, using the relayer's own `checkPolicy` and fee math in the browser:
+
+- **Design a policy**: network, sponsored operation types, a contract allowlist, max operations, a per-transaction fee cap, the expiry window, a per-account rate limit and a daily budget. Copy the resulting `sponsorgate.config.json`.
+- **Test a transaction**: paste any user-signed XDR (or generate an allowed call, a payment, a dangerous `setOptions` or a slow-expiring tx) and see instantly whether it would be sponsored, what the sponsor would pay, or exactly why it would be rejected and with which HTTP status.
+- **Connect to a running relayer** to view its live status and remaining budget.
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173
+```
+
+The app imports the library straight from `../src`, so the browser and the CLI
+share one implementation. `netlify.toml` at the repo root deploys it as-is.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
