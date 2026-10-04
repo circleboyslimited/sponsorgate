@@ -91,6 +91,12 @@ npm test        # 13 tests: every policy rule, limits, budget, submission, HTTP
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Frontend integration](docs/frontend-integration.md)
+- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
+
 ## Glossary (new to Stellar?)
 
 - **Fee bump**: a wrapper transaction that lets a second account pay the
