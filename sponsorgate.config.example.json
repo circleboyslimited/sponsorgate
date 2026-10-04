@@ -1,0 +1,15 @@
+{
+  "port": 8787,
+  "corsOrigin": "https://app.example.com",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "policy": {
+    "networkPassphrase": "Test SDF Network ; September 2015",
+    "allowedOperations": ["invokeHostFunction"],
+    "allowedContracts": ["CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE"],
+    "maxOperations": 1,
+    "maxFeeStroops": 2000000,
+    "maxValiditySeconds": 300,
+    "rateLimit": { "max": 10, "windowSeconds": 3600 },
+    "dailyBudgetStroops": 500000000
+  }
+}
