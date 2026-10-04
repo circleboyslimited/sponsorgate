@@ -66,7 +66,7 @@ export default function App() {
       <header className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <img src="/favicon.svg" className="h-8 w-8" alt="" />
+            <img src={`${import.meta.env.BASE_URL}favicon.svg`} className="h-8 w-8" alt="" />
             <span className="text-lg font-extrabold">sponsorgate</span>
             <span className="rounded-md bg-indigo-soft px-2 py-0.5 text-xs font-bold text-indigo">policy console</span>
           </div>

@@ -8,6 +8,8 @@ import { defineConfig } from "vite";
 const fromWeb = (pkg: string) => fileURLToPath(new URL(`./node_modules/${pkg}`, import.meta.url));
 
 export default defineConfig({
+  // Set by the GitHub Pages workflow to /<repo>/; "/" for Netlify or local dev.
+  base: process.env.VITE_BASE ?? "/",
   plugins: [react(), tailwindcss()],
   define: { global: "globalThis" },
   resolve: {
