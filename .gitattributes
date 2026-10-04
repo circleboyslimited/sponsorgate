@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+*.wasm binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+package-lock.json linguist-generated=true -diff
+Cargo.lock linguist-generated=true -diff
+test_snapshots/** linguist-generated=true
