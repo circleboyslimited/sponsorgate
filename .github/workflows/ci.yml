@@ -11,6 +11,15 @@ jobs:
     strategy:
       matrix:
         node: [20, 22]
+    # Redis for the shared-limits integration tests (src/redis.test.ts).
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
