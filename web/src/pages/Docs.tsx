@@ -1,4 +1,5 @@
-import { Link, useTitle } from "../lib/router";
+import { useEffect } from "react";
+import { Link, useSection, useTitle } from "../lib/router";
 
 const SECTIONS = [
   ["start", "Getting started"],
@@ -9,23 +10,19 @@ const SECTIONS = [
 
 export function Docs() {
   useTitle("Docs · sponsorgate");
+  const section = useSection();
+  useEffect(() => {
+    if (section) document.getElementById(section)?.scrollIntoView({ behavior: "smooth" });
+  }, [section]);
   return (
     <div className="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[210px_1fr]">
       <aside className="hidden lg:block">
         <nav className="sticky top-24 space-y-1 text-sm">
           <p className="mb-3 px-3 lab text-indigo">On this page</p>
           {SECTIONS.map(([id, label]) => (
-            <a
-              key={id}
-              href="#/docs"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="block rounded-lg px-3 py-2 text-gray hover:bg-indigo-soft hover:text-indigo"
-            >
+            <Link key={id} to={`/docs/${id}`} className="block rounded-lg px-3 py-2 text-gray hover:bg-indigo-soft hover:text-indigo">
               {label}
-            </a>
+            </Link>
           ))}
         </nav>
       </aside>

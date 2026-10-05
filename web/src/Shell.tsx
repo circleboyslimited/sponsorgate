@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Link, useTitle } from "./lib/router";
 
@@ -20,6 +20,22 @@ function HeaderAction() {
 
 export function Shell({ route, children }: { route: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Close on navigation; Escape closes and hands focus back to the toggle.
+  useEffect(() => setOpen(false), [route]);
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLElement>("a, button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        toggleRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-white/85 backdrop-blur">
@@ -38,12 +54,12 @@ export function Shell({ route, children }: { route: string; children: ReactNode 
           <div className="hidden md:block">
             <HeaderAction />
           </div>
-          <button className="act act-out px-3 py-2 md:hidden" onClick={() => setOpen((v) => !v)} aria-label="Menu" aria-expanded={open}>
+          <button className="act act-out px-3 py-2 md:hidden" onClick={() => setOpen((v) => !v)} ref={toggleRef} aria-label="Menu" aria-controls="mobile-menu" aria-expanded={open}>
             {open ? "✕" : "☰"}
           </button>
         </div>
         {open && (
-          <div className="space-y-1 border-t border-border px-5 py-4 md:hidden" onClick={() => setOpen(false)}>
+          <div id="mobile-menu" ref={menuRef} className="space-y-1 border-t border-border px-5 py-4 md:hidden" onClick={() => setOpen(false)}>
             {NAV.map(([to, label]) => (
               <Link key={to} to={to} className={`block rounded-lg px-3.5 py-2 text-sm font-bold ${route === to ? "bg-indigo text-white" : "text-gray hover:bg-indigo-soft hover:text-indigo"}`}>
                 {label}
@@ -70,7 +86,7 @@ export function Shell({ route, children }: { route: string; children: ReactNode 
             <ul className="mt-3 space-y-2 text-gray">
               <li><Link to="/app" className="hover:underline">Policy console</Link></li>
               <li><Link to="/docs" className="hover:underline">Documentation</Link></li>
-              <li><a href="#/docs" onClick={() => setTimeout(() => document.getElementById("faq")?.scrollIntoView(), 60)} className="hover:underline">FAQ</a></li>
+              <li><Link to="/docs/faq" className="hover:underline">FAQ</Link></li>
             </ul>
           </div>
           <div className="text-sm">
