@@ -1,3 +1,5 @@
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+
 /** Sliding-window rate limiter keyed by source account. */
 export class RateLimiter {
   private hits = new Map<string, number[]>();
@@ -18,6 +20,14 @@ export class RateLimiter {
     this.hits.set(key, recent);
     this.prune(now);
     return true;
+  }
+
+  toJSON(): Record<string, number[]> {
+    return Object.fromEntries(this.hits);
+  }
+
+  load(saved: Record<string, number[]> | undefined): void {
+    this.hits = new Map(Object.entries(saved ?? {}));
   }
 
   private prune(now: number): void {
@@ -53,8 +63,53 @@ export class DailyBudget {
     this.spent += amount;
   }
 
+  /** Give back budget, e.g. when the network charged less than the max fee. */
+  refund(amount: number, now: number): void {
+    this.roll(now);
+    this.spent = Math.max(0, this.spent - amount);
+  }
+
   remaining(now: number): number {
     this.roll(now);
     return this.limit - this.spent;
+  }
+
+  toJSON(): { day: string; spent: number } {
+    return { day: this.day, spent: this.spent };
+  }
+
+  load(saved: { day: string; spent: number } | undefined): void {
+    if (saved) ({ day: this.day, spent: this.spent } = saved);
+  }
+}
+
+/** What the relayer persists between restarts. */
+export interface LimitsState {
+  rateLimit: Record<string, number[]>;
+  budget: { day: string; spent: number };
+}
+
+/** Where limits state lives. Implement it over Redis or a database to share limits between instances. */
+export interface StateStore {
+  load(): LimitsState | null;
+  save(state: LimitsState): void;
+}
+
+/** Keeps limits in a JSON file (written atomically), so restarts don't reset them. */
+export class FileStateStore implements StateStore {
+  constructor(private readonly path: string) {}
+
+  load(): LimitsState | null {
+    try {
+      return JSON.parse(readFileSync(this.path, "utf8")) as LimitsState;
+    } catch {
+      return null;
+    }
+  }
+
+  save(state: LimitsState): void {
+    const tmp = `${this.path}.tmp`;
+    writeFileSync(tmp, JSON.stringify(state));
+    renameSync(tmp, this.path);
   }
 }
