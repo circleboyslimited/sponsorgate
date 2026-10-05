@@ -36,8 +36,9 @@ function send(res: ServerResponse, status: number, body: unknown, cors?: string)
 }
 
 /** Prometheus text exposition of the relayer's counters and budget. */
-export function metricsText(relayer: Relayer): string {
+export async function metricsText(relayer: Relayer): Promise<string> {
   const { stats } = relayer;
+  const { budgetRemainingStroops } = await relayer.status();
   const lines = [
     "# HELP sponsorgate_sponsored_total Transactions sponsored.",
     "# TYPE sponsorgate_sponsored_total counter",
@@ -47,7 +48,7 @@ export function metricsText(relayer: Relayer): string {
     ...Object.entries(stats.rejected).map(([code, n]) => `sponsorgate_rejected_total{code="${code}"} ${n}`),
     "# HELP sponsorgate_budget_remaining_stroops Daily budget left.",
     "# TYPE sponsorgate_budget_remaining_stroops gauge",
-    `sponsorgate_budget_remaining_stroops ${relayer.status().budgetRemainingStroops}`,
+    `sponsorgate_budget_remaining_stroops ${budgetRemainingStroops}`,
   ];
   return lines.join("\n") + "\n";
 }
@@ -59,10 +60,10 @@ export function createRelayerServer(relayer: Relayer, options: ServerOptions = {
     try {
       if (req.method === "OPTIONS") return send(res, 204, {}, cors);
       if (req.method === "GET" && req.url === "/health") return send(res, 200, { ok: true }, cors);
-      if (req.method === "GET" && req.url === "/status") return send(res, 200, relayer.status(), cors);
+      if (req.method === "GET" && req.url === "/status") return send(res, 200, await relayer.status(), cors);
       if (req.method === "GET" && req.url === "/metrics" && options.metrics) {
         res.writeHead(200, { "content-type": "text/plain; version=0.0.4" });
-        return res.end(metricsText(relayer));
+        return res.end(await metricsText(relayer));
       }
       if (req.method === "POST" && req.url === "/sponsor") {
         const body = (await readJson(req)) as { xdr?: unknown; submit?: unknown };

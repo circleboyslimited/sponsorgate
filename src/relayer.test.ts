@@ -124,7 +124,7 @@ describe("Relayer.sponsor", () => {
     const r = relayer(policy({ dailyBudgetStroops: 250, rateLimit: { max: 100, windowSeconds: 60 } }));
     const first = await r.sponsor(tx([call()])); // 202 stroops: (101 per op) × (1 op + bump)
     await rejects(r.sponsor(tx([call()], { seq: "2" })), /daily budget/, 503);
-    expect(r.status().budgetRemainingStroops).toBe(250 - first.feeStroops);
+    expect((await r.status()).budgetRemainingStroops).toBe(250 - first.feeStroops);
   });
 
   it("submits when asked and a submitter is configured", async () => {

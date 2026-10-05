@@ -54,11 +54,11 @@ describe("persistent limits", () => {
     const first = new Relayer(policy(), sponsor, undefined, () => NOW, new FileStateStore(file));
     await first.sponsor(tx("transfer", "1"));
     await first.sponsor(tx("transfer", "2"));
-    const spent = 1_000_000 - first.status().budgetRemainingStroops;
+    const spent = 1_000_000 - (await first.status()).budgetRemainingStroops;
 
     // "Restart": a new relayer reading the same file.
     const second = new Relayer(policy(), sponsor, undefined, () => NOW, new FileStateStore(file));
-    expect(second.status().budgetRemainingStroops).toBe(1_000_000 - spent);
+    expect((await second.status()).budgetRemainingStroops).toBe(1_000_000 - spent);
     const err = await second.sponsor(tx("transfer", "3")).catch((e: unknown) => e);
     expect((err as PolicyError).code).toBe("rate_limited");
   });
@@ -69,13 +69,13 @@ describe("actual fee charged", () => {
     const r = new Relayer(policy(), sponsor, async () => ({ hash: "h", feeCharged: 150 }), () => NOW);
     const res = await r.sponsor(tx("transfer"), true);
     expect(res.feeChargedStroops).toBe(150);
-    expect(r.status().budgetRemainingStroops).toBe(1_000_000 - 150);
+    expect((await r.status()).budgetRemainingStroops).toBe(1_000_000 - 150);
   });
 
   it("still accepts submitters that only return a hash", async () => {
     const r = new Relayer(policy(), sponsor, async () => "h", () => NOW);
     const res = await r.sponsor(tx("transfer"), true);
-    expect(r.status().budgetRemainingStroops).toBe(1_000_000 - res.feeStroops);
+    expect((await r.status()).budgetRemainingStroops).toBe(1_000_000 - res.feeStroops);
   });
 });
 
@@ -96,7 +96,7 @@ describe("HTTP codes and metrics", () => {
       expect(metrics).toContain("sponsorgate_sponsored_total 1");
       expect(metrics).toContain('sponsorgate_rejected_total{code="contract_not_allowed"} 1');
       expect(metrics).toMatch(/sponsorgate_budget_remaining_stroops \d+/);
-      expect(metricsText(r)).toBe(metrics);
+      expect(await metricsText(r)).toBe(metrics);
     } finally {
       server.close();
     }
