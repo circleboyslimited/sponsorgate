@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { Horizon, Keypair, rpc, type FeeBumpTransaction } from "@stellar/stellar-sdk";
-import type { Policy } from "./policy.js";
+import { validatePolicy, type Policy } from "./policy.js";
 import type { Submitter } from "./relayer.js";
 
 export interface RelayerConfig {
@@ -10,22 +10,16 @@ export interface RelayerConfig {
   rpcUrl?: string;
   /** Horizon URL used for submission when no RPC URL is set. */
   horizonUrl?: string;
+  /** Persist rate limits and the daily budget here so restarts don't reset them. */
+  stateFile?: string;
+  /** Serve Prometheus metrics at GET /metrics. */
+  metrics?: boolean;
   policy: Policy;
 }
 
 export function loadConfig(path: string): RelayerConfig {
   const config = JSON.parse(readFileSync(path, "utf8")) as RelayerConfig;
-  const p = config.policy;
-  if (!p?.networkPassphrase) throw new Error("policy.networkPassphrase is required");
-  if (!Array.isArray(p.allowedOperations) || p.allowedOperations.length === 0) {
-    throw new Error("policy.allowedOperations must list at least one operation type");
-  }
-  for (const key of ["maxOperations", "maxFeeStroops", "maxValiditySeconds", "dailyBudgetStroops"] as const) {
-    if (!Number.isInteger(p[key]) || p[key] <= 0) throw new Error(`policy.${key} must be a positive integer`);
-  }
-  if (!p.rateLimit || p.rateLimit.max <= 0 || p.rateLimit.windowSeconds <= 0) {
-    throw new Error("policy.rateLimit needs positive max and windowSeconds");
-  }
+  validatePolicy(config.policy);
   return { ...config, port: config.port ?? 8787 };
 }
 
@@ -42,12 +36,24 @@ export function submitterFor(config: RelayerConfig): Submitter | undefined {
     return async (tx: FeeBumpTransaction) => {
       const res = await server.sendTransaction(tx);
       if (res.status === "ERROR") throw new Error(`RPC rejected the transaction: ${res.errorResult?.toXDR("base64")}`);
+      // Wait briefly for the result so the budget can be charged what the network actually took.
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 1_000));
+        const got = await server.getTransaction(res.hash).catch(() => null);
+        if (got && got.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) {
+          const charged = "resultXdr" in got && got.resultXdr ? Number(got.resultXdr.feeCharged().toBigInt()) : undefined;
+          return { hash: res.hash, feeCharged: charged };
+        }
+      }
       return res.hash;
     };
   }
   if (config.horizonUrl) {
     const server = new Horizon.Server(config.horizonUrl);
-    return async (tx: FeeBumpTransaction) => (await server.submitTransaction(tx)).hash;
+    return async (tx: FeeBumpTransaction) => {
+      const res = (await server.submitTransaction(tx)) as { hash: string; fee_charged?: string | number };
+      return { hash: res.hash, feeCharged: res.fee_charged === undefined ? undefined : Number(res.fee_charged) };
+    };
   }
   return undefined;
 }

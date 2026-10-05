@@ -20,7 +20,8 @@
     "start": "node dist/bin.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "prepare": "npm run build"
   },
   "keywords": [
     "stellar",

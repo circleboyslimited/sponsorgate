@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Account, Asset, Contract, Keypair, Networks, Operation, TransactionBuilder, nativeToScVal, type xdr } from "@stellar/stellar-sdk";
-import { checkPolicy, parseInner, PolicyError, totalBumpFee, type Policy } from "../../src/policy";
+import { checkPolicy, parseInner, PolicyError, totalBumpFee, validatePolicy, type Policy } from "../../src/policy";
 
 const OP_TYPES = ["invokeHostFunction", "payment", "pathPaymentStrictSend", "changeTrust", "manageData", "setOptions", "createAccount"];
 const STROOPS = 10_000_000;
@@ -39,6 +39,20 @@ export function Workspace() {
   });
   const [contractsText, setContractsText] = useState(policy.allowedContracts!.join("\n"));
   const [xdrIn, setXdrIn] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Load an existing sponsorgate.config.json (or a bare policy) back into the form.
+  const importConfig = (text: string) => {
+    try {
+      const parsed = JSON.parse(text) as { policy?: unknown };
+      const p = validatePolicy(parsed && typeof parsed === "object" && "policy" in parsed ? parsed.policy : parsed);
+      setPolicy({ ...p, allowedContracts: p.allowedContracts ?? [] });
+      setContractsText((p.allowedContracts ?? []).join("\n"));
+      setImportMsg({ ok: true, text: "Config loaded into the form." });
+    } catch (e) {
+      setImportMsg({ ok: false, text: e instanceof SyntaxError ? "That isn't valid JSON." : e instanceof Error ? e.message : String(e) });
+    }
+  };
   const set = <K extends keyof Policy>(k: K, v: Policy[K]) => setPolicy((p) => ({ ...p, [k]: v }));
 
   const effective: Policy = useMemo(() => {
@@ -52,10 +66,15 @@ export function Workspace() {
       const tx = parseInner(xdrIn.trim(), effective.networkPassphrase);
       const fee = totalBumpFee(tx);
       checkPolicy(tx, effective, SPONSOR_DEMO, Math.floor(Date.now() / 1000));
-      if (fee > effective.maxFeeStroops) throw new PolicyError(`fee ${fee} stroops exceeds the per-transaction cap of ${effective.maxFeeStroops}`);
+      if (fee > effective.maxFeeStroops) throw new PolicyError(`fee ${fee} stroops exceeds the per-transaction cap of ${effective.maxFeeStroops}`, 400, "fee_too_high");
       return { ok: true as const, fee, ops: tx.operations.map((o) => o.type), source: tx.source };
     } catch (e) {
-      return { ok: false as const, error: e instanceof Error ? e.message : String(e), status: e instanceof PolicyError ? e.status : 400 };
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : String(e),
+        status: e instanceof PolicyError ? e.status : 400,
+        code: e instanceof PolicyError ? e.code : "policy_violation",
+      };
     }
   }, [xdrIn, effective]);
 
@@ -78,7 +97,7 @@ export function Workspace() {
         </p>
       </section>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-5 pb-16 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-7xl gap-6 px-5 pb-16 lg:grid-cols-2">
         <section className="panel space-y-5 p-6">
           <h2 className="text-xl font-bold">1 · Policy</h2>
           <div>
@@ -106,7 +125,7 @@ export function Workspace() {
             </div>
           </div>
           <div>
-            <p className="lab">Allowed contracts (one per line; empty = any)</p>
+            <p className="lab">Allowed contracts (one per line: C… or C…:function; empty = any)</p>
             <textarea className="inp mt-1 h-20 font-mono text-xs" value={contractsText} onChange={(e) => setContractsText(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -146,6 +165,34 @@ export function Workspace() {
               Copy config
             </button>
           </details>
+          <details>
+            <summary className="cursor-pointer text-sm font-bold text-indigo">Import an existing config</summary>
+            <textarea
+              className="inp mt-2 h-28 font-mono text-xs"
+              placeholder="Paste sponsorgate.config.json (or just its policy)"
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button className="act act-ind" disabled={!importText.trim()} onClick={() => importConfig(importText)}>
+                Load into form
+              </button>
+              <label className="act act-out cursor-pointer">
+                Upload file…
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) importConfig(await file.text());
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {importMsg && <span className={`text-sm ${importMsg.ok ? "text-pass" : "text-fail"}`}>{importMsg.text}</span>}
+            </div>
+          </details>
         </section>
 
         <section className="space-y-6">
@@ -178,14 +225,16 @@ export function Workspace() {
                 </div>
               ) : (
                 <div className="mt-4 rounded-xl border border-fail/30 bg-fail/5 p-4">
-                  <p className="font-bold text-fail">✗ Rejected ({verdict.status})</p>
+                  <p className="font-bold text-fail">
+                    ✗ Rejected ({verdict.status}) <code className="ml-1 rounded bg-fail/10 px-1.5 py-0.5 font-mono text-xs">{verdict.code}</code>
+                  </p>
                   <p className="mt-1 text-sm">{verdict.error}</p>
                 </div>
               ))}
           </div>
           <LiveRelayer />
         </section>
-      </main>
+      </div>
     </div>
   );
 }

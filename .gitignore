@@ -4,3 +4,4 @@ coverage/
 .env
 sponsorgate.config.json
 .DS_Store
+sponsorgate.state.json*

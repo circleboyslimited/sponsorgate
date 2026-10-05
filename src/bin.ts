@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { loadConfig, sponsorFromEnv, submitterFor } from "./config.js";
+import { FileStateStore } from "./limits.js";
 import { Relayer } from "./relayer.js";
 import { createRelayerServer } from "./server.js";
 
 try {
   const config = loadConfig(process.argv[2] ?? "sponsorgate.config.json");
   const sponsor = sponsorFromEnv();
-  const relayer = new Relayer(config.policy, sponsor, submitterFor(config));
-  const server = createRelayerServer(relayer, { corsOrigin: config.corsOrigin });
+  const store = config.stateFile ? new FileStateStore(config.stateFile) : undefined;
+  const relayer = new Relayer(config.policy, sponsor, submitterFor(config), undefined, store);
+  const server = createRelayerServer(relayer, { corsOrigin: config.corsOrigin, metrics: config.metrics });
   server.listen(config.port, () => {
     console.log(`[sponsorgate] sponsoring as ${sponsor.publicKey()} on :${config.port}`);
   });

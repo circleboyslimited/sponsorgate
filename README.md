@@ -21,7 +21,7 @@ contracts *your* app uses, within fee, rate and budget limits.
 {
   "networkPassphrase": "Test SDF Network ; September 2015",
   "allowedOperations": ["invokeHostFunction"],
-  "allowedContracts": ["CA3D…GAXE"],
+  "allowedContracts": ["CA3D…GAXE", "CDLZ…CYSC:transfer"],
   "maxOperations": 1,
   "maxFeeStroops": 2000000,
   "maxValiditySeconds": 300,
@@ -50,17 +50,43 @@ Soroban transactions with resource fees are bumped correctly.
 
 | Method & path | Body | Response |
 | --- | --- | --- |
-| `POST /sponsor` | `{ "xdr": "<signed inner envelope>", "submit": false }` | `{ xdr, hash, feeStroops, submitted }` |
+| `POST /sponsor` | `{ "xdr": "<signed inner envelope>", "submit": false }` | `{ xdr, hash, feeStroops, feeChargedStroops?, submitted }` |
 | `GET /status` | | Sponsor address, network, remaining daily budget, policy |
 | `GET /health` | | `{ ok: true }` |
+| `GET /metrics` | | Prometheus counters and budget gauge (when `"metrics": true`) |
 
-Errors come back as `{ "error": "…" }` with a meaningful status: `400`
+Errors come back as `{ "error": "…", "code": "…" }` with a meaningful status: `400`
 (malformed), `403` (policy forbids it), `413` (body too large), `429`
 (rate limited), `501` (submission disabled), `502` (network rejected
-it), `503` (budget exhausted).
+it), `503` (budget exhausted). `code` is stable, so apps can react without
+parsing messages:
+
+| `code` | Status | Meaning |
+| --- | --- | --- |
+| `invalid_xdr`, `bad_json`, `missing_xdr` | 400 | Malformed request |
+| `fee_bump_not_allowed`, `unsigned`, `too_many_operations`, `validity_too_long`, `expired`, `fee_too_high` | 400 | Transaction doesn't meet the policy |
+| `sponsor_is_source`, `acts_as_sponsor`, `operation_not_allowed`, `contract_not_allowed` | 403 | Policy forbids it |
+| `body_too_large` | 413 | Request body over 64 KB |
+| `rate_limited` | 429 | Too many from this account |
+| `submit_disabled` | 501 | No `rpcUrl`/`horizonUrl` configured |
+| `submit_failed` | 502 | The network rejected the submission |
+| `budget_exhausted` | 503 | Daily budget used up |
+
+`allowedContracts` entries are a contract id (any function) or `C…:function`
+(only that function), so sponsoring a token's `transfer` doesn't also sponsor `approve`.
 
 With `"submit": true` the relayer submits through Soroban RPC (`rpcUrl`)
-or Horizon (`horizonUrl`). Otherwise your app submits the returned XDR.
+or Horizon (`horizonUrl`) and, once the result is in, returns the unused
+part of the max fee to the daily budget. Otherwise your app submits the
+returned XDR.
+
+### Limits that survive restarts
+
+Set `"stateFile": "sponsorgate.state.json"` and the rate limiter and daily
+budget are saved (atomically) after every request and restored on start.
+To share limits between several relayer instances, implement the
+`StateStore` interface (`load()` / `save(state)`) over Redis or a database
+and pass it to `new Relayer(policy, key, submitter, clock, store)`.
 
 ## Run it
 
@@ -76,6 +102,12 @@ intend to spend.
 
 ## Use it as a library
 
+Not published to npm yet; install it from GitHub (it builds on install):
+
+```bash
+npm install github:circleboyslimited/sponsorgate
+```
+
 ```ts
 import { Relayer, createRelayerServer } from "sponsorgate";
 
@@ -87,13 +119,17 @@ const { xdr } = await relayer.sponsor(userSignedXdr);
 
 ```bash
 npm install
-npm test        # 13 tests: every policy rule, limits, budget, submission, HTTP
+npm test        # 18 tests: every policy rule, limits, persistence, budget, submission, HTTP, metrics
 npm run lint && npm run typecheck && npm run build
 ```
 
 ## Web app
 
 ![sponsorgate web app](docs/assets/web-app.png)
+
+The site has three pages: **Home** (what it does, with live testnet data), **App** (the tool itself) and **Docs** (getting started, concepts, reference and FAQ).
+
+![sponsorgate app page](docs/assets/web-app-page.png)
 
 A policy console at `web/`, using the relayer's own `checkPolicy` and fee math in the browser:
 
