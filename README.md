@@ -84,9 +84,17 @@ returned XDR.
 
 Set `"stateFile": "sponsorgate.state.json"` and the rate limiter and daily
 budget are saved (atomically) after every request and restored on start.
-To share limits between several relayer instances, implement the
-`StateStore` interface (`load()` / `save(state)`) over Redis or a database
-and pass it to `new Relayer(policy, key, submitter, clock, store)`.
+
+### Several relayer instances
+
+Behind a load balancer, give every instance the same `"redisUrl"`
+(`npm install ioredis`, an optional dependency). Rate limits and the daily
+budget then live in Redis and are shared: each check is one Lua script, so
+concurrent requests on different instances can't overspend the budget or
+slip past an account's limit. `redisUrl` takes precedence over `stateFile`.
+
+As a library, pass any `LimitsBackend` (`LocalLimits`, `RedisLimits`, or
+your own) as the fifth argument: `new Relayer(policy, key, submitter, clock, limits)`.
 
 ## Run it
 
@@ -119,7 +127,7 @@ const { xdr } = await relayer.sponsor(userSignedXdr);
 
 ```bash
 npm install
-npm test        # 18 tests: every policy rule, limits, persistence, budget, submission, HTTP, metrics
+npm test        # 21 tests (3 need REDIS_URL): policy rules, limits, persistence, shared Redis limits, budget, submission, HTTP, metrics
 npm run lint && npm run typecheck && npm run build
 ```
 

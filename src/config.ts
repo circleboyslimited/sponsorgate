@@ -12,6 +12,11 @@ export interface RelayerConfig {
   horizonUrl?: string;
   /** Persist rate limits and the daily budget here so restarts don't reset them. */
   stateFile?: string;
+  /**
+   * Share rate limits and the daily budget through Redis (for several relayer
+   * instances). Needs the optional `ioredis` dependency. Takes precedence over stateFile.
+   */
+  redisUrl?: string;
   /** Serve Prometheus metrics at GET /metrics. */
   metrics?: boolean;
   policy: Policy;

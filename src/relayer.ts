@@ -1,5 +1,5 @@
 import { Keypair, TransactionBuilder, type FeeBumpTransaction } from "@stellar/stellar-sdk";
-import { DailyBudget, RateLimiter, type StateStore } from "./limits.js";
+import { LocalLimits, type LimitsBackend, type StateStore } from "./limits.js";
 import { bumpBaseFee, checkPolicy, parseInner, PolicyError, totalBumpFee, type Policy } from "./policy.js";
 
 /**
@@ -25,28 +25,22 @@ export interface SponsorResult {
 }
 
 export class Relayer {
-  private readonly limiter: RateLimiter;
-  private readonly budget: DailyBudget;
+  private readonly limits: LimitsBackend;
   readonly stats: RelayerStats = { sponsored: 0, rejected: {} };
 
+  /**
+   * `limits` is either a StateStore (single instance, persisted locally) or a
+   * LimitsBackend such as RedisLimits (shared by several instances).
+   */
   constructor(
     private readonly policy: Policy,
     private readonly sponsorKey: Keypair,
     private readonly submitter?: Submitter,
     private readonly clock: () => number = () => Math.floor(Date.now() / 1000),
-    private readonly store?: StateStore,
+    limits?: StateStore | LimitsBackend,
   ) {
-    this.limiter = new RateLimiter(policy.rateLimit.max, policy.rateLimit.windowSeconds);
-    this.budget = new DailyBudget(policy.dailyBudgetStroops);
-    const saved = store?.load();
-    if (saved) {
-      this.limiter.load(saved.rateLimit);
-      this.budget.load(saved.budget);
-    }
-  }
-
-  private persist(): void {
-    this.store?.save({ rateLimit: this.limiter.toJSON(), budget: this.budget.toJSON() });
+    this.limits =
+      limits && "reserve" in limits ? limits : new LocalLimits(policy.rateLimit, policy.dailyBudgetStroops, limits);
   }
 
   async sponsor(envelope: string, submit = false): Promise<SponsorResult> {
@@ -58,8 +52,6 @@ export class Relayer {
       const code = err instanceof PolicyError ? err.code : "submit_failed";
       this.stats.rejected[code] = (this.stats.rejected[code] ?? 0) + 1;
       throw err;
-    } finally {
-      this.persist();
     }
   }
 
@@ -72,22 +64,27 @@ export class Relayer {
     if (fee > this.policy.maxFeeStroops) {
       throw new PolicyError(`fee ${fee} stroops exceeds the per-transaction cap of ${this.policy.maxFeeStroops}`, 400, "fee_too_high");
     }
-    if (!this.budget.canSpend(fee, now)) {
+    // Reserve first (atomically, so parallel relayers can't overspend), then
+    // rate-limit; anything that fails after the reservation gives it back.
+    if (!(await this.limits.reserve(fee, now))) {
       throw new PolicyError("the sponsor's daily budget is exhausted, try again tomorrow", 503, "budget_exhausted");
     }
-    if (!this.limiter.take(inner.source, now)) {
-      throw new PolicyError("too many sponsored transactions from this account, slow down", 429, "rate_limited");
+    let feeBump;
+    try {
+      if (!(await this.limits.take(inner.source, now))) {
+        throw new PolicyError("too many sponsored transactions from this account, slow down", 429, "rate_limited");
+      }
+      feeBump = TransactionBuilder.buildFeeBumpTransaction(
+        this.sponsorKey,
+        String(bumpBaseFee(inner)),
+        inner,
+        this.policy.networkPassphrase,
+      );
+      feeBump.sign(this.sponsorKey);
+    } catch (err) {
+      await this.limits.refund(fee, now);
+      throw err;
     }
-
-    const feeBump = TransactionBuilder.buildFeeBumpTransaction(
-      this.sponsorKey,
-      String(bumpBaseFee(inner)),
-      inner,
-      this.policy.networkPassphrase,
-    );
-    feeBump.sign(this.sponsorKey);
-    this.budget.spend(fee, now);
-
     const hash = feeBump.hash().toString("hex");
     let feeCharged: number | undefined;
     if (submit) {
@@ -95,18 +92,18 @@ export class Relayer {
       const sent = await this.submitter(feeBump);
       feeCharged = typeof sent === "string" ? undefined : sent.feeCharged;
       // The budget reserved the max fee; give back what the network didn't charge.
-      if (feeCharged !== undefined && feeCharged < fee) this.budget.refund(fee - feeCharged, now);
+      if (feeCharged !== undefined && feeCharged < fee) await this.limits.refund(fee - feeCharged, now);
     }
 
     return { xdr: feeBump.toXDR(), hash, feeStroops: fee, feeChargedStroops: feeCharged, submitted: submit };
   }
 
-  status() {
+  async status() {
     const now = this.clock();
     return {
       sponsor: this.sponsorKey.publicKey(),
       network: this.policy.networkPassphrase,
-      budgetRemainingStroops: this.budget.remaining(now),
+      budgetRemainingStroops: await this.limits.remaining(now),
       policy: this.policy,
     };
   }
