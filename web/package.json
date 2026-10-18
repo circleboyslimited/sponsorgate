@@ -16,7 +16,7 @@
     "@stellar/stellar-sdk": "^14.0.0",
     "@types/node": "^22.20.5",
     "buffer": "^6.0.3",
-    "react": "^19.0.0",
+    "react": "^19.3.1",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
